@@ -8,7 +8,8 @@ a pretrained segmentation model (MobileSAM) decides which pixels belong to the c
 **Team (Dept. of Computer Science and Engineering (AIML), Karunya Institute of Technology and Sciences):**
 Joel Prasad (URK24CS7019) · Nevin Reji (URK24CS7004) · Prince Amos (URK24CS7024)
 
-📄 **Project report:** [docs/Spatial_Measure_Project_Report.pdf](docs/Spatial_Measure_Project_Report.pdf)
+📄 **Project report:** [docs/Spatial_Measure_Project_Report.pdf](docs/Spatial_Measure_Project_Report.pdf)  
+🎬 **Video demonstration:** [youtu.be/2LbJO3nAttc](https://youtu.be/2LbJO3nAttc)
 
 | App: tap to measure | Pipeline output, plane tilted 45° |
 |---|---|
