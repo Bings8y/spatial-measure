@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+.pytest_cache/
+snapshots/
+calib_*.png
+measurements.csv
+build/
+models/
+datasets/
+
+# macOS / Office clutter
+.DS_Store
+~$*
+
+# local outputs and coursework files not published here
+/calibration.npz
+/report_assets/
+/Design and Implementation of a Real.docx
+/Spatial_Measure_Project_Report.docx
+/Spatial_Measure_Project_Report.pdf
+/Spatial_Measure_Presentation.pptx
+/Spatial_Measure_Demo.mp4
+/narration_script.txt
