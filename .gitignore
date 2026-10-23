@@ -4,6 +4,8 @@ __pycache__/
 snapshots/
 calib_*.png
 measurements.csv
+settings.json
+settings.json.tmp
 build/
 models/
 datasets/

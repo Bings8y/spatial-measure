@@ -10,9 +10,12 @@ For benchmarking (paper Section 5), name the object and its caliper size; each S
 logs the largest object, and evaluate.py turns the log into the accuracy table:
     python measure.py --source 0 --calib calibration.npz --label "Credit card" --truth 85.60x53.98
 """
+from __future__ import annotations
+
 import argparse
 import csv
 import os
+import sys
 import threading
 import time
 from datetime import datetime
@@ -21,6 +24,7 @@ import cv2
 import numpy as np
 
 from spatial_measure import SpatialDimensionEstimator, draw_overlay
+from spatial_measure import settings as saved_settings
 
 LOG_FIELDS = ["timestamp", "label", "object", "length_mm", "width_mm", "truth_length_mm", "truth_width_mm",
               "distance_pnp_mm", "distance_similar_mm", "truth_distance_mm", "tilt_deg"]
@@ -34,6 +38,20 @@ def load_calibration(path):
     return data["camera_matrix"], data["dist_coeffs"]
 
 
+def open_camera(index: int, width: int | None = None, height: int | None = None) -> cv2.VideoCapture:
+    """Opens a webcam on any OS. On Windows DirectShow is used: the default Media Foundation backend can take
+    many seconds to open and often ignores the requested resolution."""
+    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW) if sys.platform == "win32" else cv2.VideoCapture(index)
+    if sys.platform == "win32" and not cap.isOpened():
+        cap = cv2.VideoCapture(index)
+    elif sys.platform == "win32":
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  # raw YUY2 at 1080p is often only 5 fps
+    if width and height:
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    return cap
+
+
 def fit(img, max_w=1280, max_h=720):
     scale = min(1.0, max_w / img.shape[1], max_h / img.shape[0])
     return cv2.resize(img, None, fx=scale, fy=scale) if scale < 1 else img
@@ -45,7 +63,7 @@ def log_rows(path, result, args):
         print("Nothing to log.")
         return
     new = not os.path.exists(path)
-    with open(path, "a", newline="") as f:
+    with open(path, "a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
         if new:
             w.writeheader()
@@ -98,11 +116,14 @@ def parse_truth(s):
 
 
 def main():
+    saved = saved_settings.load()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--source", default="0", help="webcam index, video file or image file")
-    ap.add_argument("--marker-mm", type=float, default=50.0, help="printed marker side length, measured with a ruler")
+    ap.add_argument("--marker-mm", type=float, default=float(saved["marker_mm"]),
+                    help="printed marker side length, measured with a ruler (default: the size saved in settings.json)")
     ap.add_argument("--marker-id", type=int, help="only use this ArUco id (default: largest marker in view)")
-    ap.add_argument("--calib", help="calibration.npz from calibrate.py")
+    ap.add_argument("--calib", default=saved["calibration"],
+                    help="calibration.npz from calibrate.py (default: the file saved in settings.json, or ./calibration.npz)")
     ap.add_argument("--px-per-mm", type=float, default=4.0, help="resolution of the rectified view")
     ap.add_argument("--min-area-mm2", type=float, default=150.0)
     ap.add_argument("--no-clahe", action="store_true", help="disable LAB/CLAHE shadow suppression")
@@ -116,6 +137,7 @@ def main():
     ap.add_argument("--truth-distance", type=float, help="benchmark: true camera-to-marker distance in mm")
     args = ap.parse_args()
 
+    print(f"Marker side: {args.marker_mm:g} mm")
     K, dist = load_calibration(args.calib)
     est = SpatialDimensionEstimator(
         marker_length_mm=args.marker_mm, camera_matrix=K, dist_coeffs=dist, px_per_mm=args.px_per_mm,
@@ -138,10 +160,7 @@ def main():
         cv2.waitKey(0)
         return
 
-    cap = cv2.VideoCapture(int(args.source) if args.source.isdigit() else args.source)
-    if args.source.isdigit():
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
+    cap = open_camera(int(args.source), args.width, args.height) if args.source.isdigit() else cv2.VideoCapture(args.source)
     if K is not None:
         print("Make sure the capture resolution matches the one used for calibration.")
     reader = LatestFrameReader(cap) if args.source.isdigit() else cap  # files: process every frame

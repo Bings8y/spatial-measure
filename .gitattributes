@@ -1,0 +1,3 @@
+*.bat text eol=crlf
+*.sh text eol=lf
+HOW_TO_RUN.txt text eol=crlf

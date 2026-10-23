@@ -14,6 +14,8 @@ import glob
 import cv2
 import numpy as np
 
+from measure import open_camera
+
 CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-3)
 
 
@@ -53,10 +55,7 @@ def from_images(pattern_glob, pattern):
 
 
 def from_camera(index, pattern, width, height):
-    cap = cv2.VideoCapture(index)
-    if width:
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    cap = open_camera(index, width, height)
     points, size = [], None
     while True:
         ok, frame = cap.read()

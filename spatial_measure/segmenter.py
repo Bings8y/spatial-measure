@@ -20,7 +20,7 @@ class SamSegmenter:
         from ultralytics import SAM
 
         os.makedirs(os.path.dirname(weights), exist_ok=True)
-        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
+        self.device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
         self.model = SAM(weights)  # downloads the official MobileSAM weights on first use
 
     def segment(self, frame_bgr: np.ndarray, point: tuple[float, float], extra_points=()) -> np.ndarray | None:

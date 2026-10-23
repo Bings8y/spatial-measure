@@ -1,6 +1,6 @@
-"""Measurement engine for the native macOS app (macapp/).
+"""Measurement engine for the native macOS app (macapp/) and the cross-platform app (app.py).
 
-The app owns the camera and the on-screen preview; it streams frames to this process over
+app.py runs `Engine` in-process on a worker thread. The macOS app owns the camera and the on-screen preview; it streams frames to this process over
 stdin and draws whatever comes back. Because the app only sends a new frame once the previous
 result has arrived, the preview never waits on the measurement pipeline.
 
@@ -31,7 +31,6 @@ from spatial_measure.estimator import FrameResult
 from spatial_measure.scan import PlaneTracker, ScanMap
 
 OUT = sys.stdout
-sys.stdout = sys.stderr  # keep stray prints (e.g. from log_rows) off the protocol channel
 
 
 def send(msg: dict):
@@ -90,7 +89,8 @@ class SizeSmoother:
 
 
 class Engine:
-    def __init__(self):
+    def __init__(self, emit=send):
+        self.emit = emit  # receives every reply (a dict); stdout for the macOS app, a queue for app.py
         self.settings = {"marker_mm": 50.0, "calibration": None, "use_clahe": True, "refine": True, "smoothing": True, "scan": False, "mode": "table", "distance_mm": 400.0, "hfov_deg": 65.0, "ai": False}
         self.smoother = SizeSmoother()
         self.last = None
@@ -126,7 +126,7 @@ class Engine:
         self.settings.update(cfg)
         try:
             self.build()
-            send({"type": "config", "ok": True, "calibrated": self.est.K is not None})
+            self.emit({"type": "config", "ok": True, "calibrated": self.est.K is not None})
         except Exception as e:
             traceback.print_exc()
             failed_ai = bool(self.settings.get("ai")) and self.sam is None
@@ -134,7 +134,7 @@ class Engine:
             self.settings["ai"] = False
             self.build()
             what = "Smart outline unavailable" if failed_ai else "Could not load calibration"
-            send({"type": "config", "ok": False, "message": f"{what}: {e}", "ai_failed": failed_ai})
+            self.emit({"type": "config", "ok": False, "message": f"{what}: {e}", "ai_failed": failed_ai})
 
     def _open(self, is_open: bool) -> bool:
         """'Fully scanned' only after 6 consecutive frames agree, so one odd frame cannot flip the label."""
@@ -152,15 +152,18 @@ class Engine:
         self.seed_px = None if req.get("clear") else (float(req["x"]), float(req["y"]))
 
     def frame(self, w: int, h: int, bpr: int, data: memoryview):
-        t0 = time.perf_counter()
         bgra = np.frombuffer(data, np.uint8).reshape(h, bpr)[:, : w * 4].reshape(h, w, 4)
+        self.process(cv2.cvtColor(bgra, cv2.COLOR_BGRA2BGR))
+
+    def process(self, bgr: np.ndarray):
+        t0 = time.perf_counter()
+        h, w = bgr.shape[:2]
         fresh = self.seed_px
         nomarker = self.settings.get("mode") == "nomarker"  # scale from an assumed distance, no marker
         hand = nomarker or self.settings.get("mode") == "hand"  # object held in the hand: follow it in the image
         following = hand and self.following
         seed_arg = fresh if fresh is not None else (self.follow_px if following else None)
         scan = (not hand) and bool(self.settings.get("scan")) and (fresh is not None or self.seed_mm is not None)
-        bgr = cv2.cvtColor(bgra, cv2.COLOR_BGRA2BGR)
         if nomarker and seed_arg is not None:
             r = self.est.process_nomarker(bgr, seed_arg, float(self.settings["distance_mm"]), float(self.settings["hfov_deg"]))
         elif nomarker:
@@ -255,7 +258,7 @@ class Engine:
         for (ma, oa), (mb, ob) in zip(ordered, ordered[1:]):
             pairs.append({"a": oa["center"], "b": ob["center"], "mm": round(math.dist(ma.center_mm, mb.center_mm), 1)})
 
-        send({
+        self.emit({
             "type": "result",
             "frame_size": [w, h],
             "marker_found": r.marker_found,
@@ -276,7 +279,7 @@ class Engine:
 
     def log(self, req: dict):
         if self.last is None:
-            send({"type": "logged", "ok": False, "message": "No frame processed yet"})
+            self.emit({"type": "logged", "ok": False, "message": "No frame processed yet"})
             return
         truth = req.get("truth") or None
         args = types.SimpleNamespace(
@@ -289,7 +292,7 @@ class Engine:
         snap = f"snapshots/{datetime.now():%Y%m%d_%H%M%S}.png"
         cv2.imwrite(snap, draw_overlay(self.last))
         n = 1 if args.label else len(self.last.measurements)
-        send({"type": "logged", "ok": True, "message": f"Logged {n} object(s) to measurements.csv"})
+        self.emit({"type": "logged", "ok": True, "message": f"Logged {n} object(s) to measurements.csv"})
 
 
 def _r(v):
@@ -297,6 +300,8 @@ def _r(v):
 
 
 def main():
+    global OUT
+    OUT, sys.stdout = sys.stdout, sys.stderr  # keep stray prints (e.g. from log_rows) off the protocol channel
     stdin = sys.stdin.buffer
     engine = Engine()
     send({"type": "ready", "opencv": cv2.__version__})

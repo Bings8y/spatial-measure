@@ -4,6 +4,7 @@
 """
 import argparse
 import csv
+import sys
 from collections import defaultdict
 from statistics import mean, pstdev
 
@@ -53,7 +54,8 @@ def distance_table(rows):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("log", nargs="?", default="measurements.csv")
-    rows = list(csv.DictReader(open(ap.parse_args().log)))
+    sys.stdout.reconfigure(encoding="utf-8")  # the tables use σ² and ·, which a redirected Windows console can't encode
+    rows = list(csv.DictReader(open(ap.parse_args().log, newline="", encoding="utf-8")))
     dims, dist = dimension_table(rows), distance_table(rows)
     if dims:
         print("## Dimensional accuracy\n\n" + dims + "\n")

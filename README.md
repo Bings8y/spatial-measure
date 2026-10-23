@@ -8,6 +8,7 @@ a pretrained segmentation model (MobileSAM) decides which pixels belong to the c
 **Team (Dept. of Computer Science and Engineering (AIML), Karunya Institute of Technology and Sciences):**
 Joel Prasad (URK24CS7019) · Nevin Reji (URK24CS7004) · Prince Amos (URK24CS7024)
 
+🛠 **How to run (Windows / macOS / Linux):** [HOW_TO_RUN.txt](HOW_TO_RUN.txt)  
 📄 **Project report:** [docs/Spatial_Measure_Project_Report.pdf](docs/Spatial_Measure_Project_Report.pdf)  
 🎬 **Video demonstration:** [youtu.be/2LbJO3nAttc](https://youtu.be/2LbJO3nAttc)
 
@@ -32,10 +33,12 @@ frame → undistort (K, dist) → detect ArUco → homography (DLT) → top-down
 | 45° | 86.0 × 54.4 mm | 560 / 560 mm |
 
 - Size error ≈ 1 % up to 900 mm, ≈ 3 % at 1.5 m; PnP distance within 0.2 % at any tilt up to 60°.
-- All 11 automated tests pass (`python -m pytest`).
+- All 13 automated tests pass (`python -m pytest`).
 - A trial with a physical camera has not been recorded yet, so no real-world accuracy is claimed.
 
 ## Setup
+
+macOS / Linux:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -43,7 +46,40 @@ pip install -r requirements.txt
 python -m pytest            # synthetic end-to-end tests, no camera needed
 ```
 
-## macOS app (recommended for live use)
+Windows (PowerShell or Command Prompt, Python 3.10+ from python.org):
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python -m pytest
+```
+
+## Desktop app — Windows, macOS and Linux
+
+```bash
+python app.py                # live webcam
+python app.py --source photo.jpg   # or a still image / video file
+```
+
+On Windows you can simply double-click **`run_windows.bat`**: the first run creates `.venv` and installs the
+requirements, later runs open the app straight away. The app has the same features as the macOS app below (tap to
+measure, *Table* / *Hand + marker* / *Hand, no marker* modes, Smart outline, scanning large objects, benchmark log);
+it runs the same engine in-process (`engine_server.Engine` on a worker thread), shows the camera at its full frame
+rate and always measures the newest frame. Click an object to measure it, Esc clears, Ctrl+L logs (⌘L on a Mac),
+Ctrl+P pauses. On Windows the camera is opened through DirectShow with MJPG, which opens quickly and gives 30 fps
+at 1080p on most webcams; if the camera list shows the wrong device, pick another index in *Settings*. Windows asks
+for camera permission under *Settings › Privacy & security › Camera › Let desktop apps access your camera*.
+Smart outline uses an NVIDIA GPU (CUDA) when PyTorch has one, Apple's GPU on a Mac, otherwise the CPU.
+
+**Settings are remembered.** The marker size, calibration file, mode, camera and toggles are saved to
+`settings.json` in the project folder as soon as you change them and are restored on the next start, so the
+printed marker is measured and entered only once per computer. `measure.py` uses the saved marker size and
+calibration as its defaults too (flags still override them). `settings.json` is not committed, because each
+teammate's printer and camera differ; the calibration path is stored relative to the project folder when it is
+inside it.
+
+## macOS app (native)
 
 ```bash
 ./macapp/build.sh && open "build/Spatial Measure.app"      # needs only the Xcode Command Line Tools
@@ -120,7 +156,10 @@ pass by the marker again to re-anchor.
 |---|---|
 | `spatial_measure/estimator.py` | Core pipeline (`SpatialDimensionEstimator`, `draw_overlay`) |
 | `macapp/` | Native macOS app (SwiftUI + AVFoundation); `build.sh` produces `build/Spatial Measure.app` |
-| `engine_server.py` | Measurement engine the app talks to over stdin/stdout |
+| `app.py` | Cross-platform desktop app (Windows, macOS, Linux; Tkinter) |
+| `run_windows.bat` | Windows launcher: sets up `.venv` on first run, then starts `app.py` |
+| `engine_server.py` | Measurement engine: the macOS app talks to it over stdin/stdout, `app.py` runs it in-process |
+| `spatial_measure/settings.py` | Saved settings (`settings.json`) shared by `app.py` and `measure.py` |
 | `measure.py` | OpenCV-window version: webcam / video / image measurement + CSV logging |
 | `calibrate.py` | Checkerboard calibration (Zhang's method) |
 | `generate_targets.py` | Print-ready marker and checkerboard PDFs |
